@@ -20,8 +20,19 @@ BleCharacteristic seizureAlertCharacteristicUuid("seizureAlert", BleCharacterist
 
 BleAdvertisingData advData;
 
+void connectCallback(const BlePeerDevice& peer, void* context){
+  // Serial.println("BLE_Connected");
+  digitalWrite(D7, HIGH);
+}
+
+void disconnectCallback(const BlePeerDevice& peer, void* context){
+  // Serial.println("BLE_Disconnected");
+  digitalWrite(D7, LOW);
+}
+
 void configureBLE()
 {
+  // BLE.on();
   BLE.setDeviceName("Tablet");
   BLE.addCharacteristic(tabletBatteryLevelCharacteristicUuid);
   BLE.addCharacteristic(insBatteryLevelCharacteristicUuid);
@@ -42,28 +53,77 @@ void configureBLE()
 //   }
 // }
 
+void seizureAlert(void);
+
 // setup() runs once, when the device is first turned on.
 void setup() {
+  BLE.on();
+  BLE.onConnected(connectCallback);
+  BLE.onDisconnected(disconnectCallback);
   pinMode(D7, OUTPUT);
+  pinMode(D6, INPUT_PULLUP);
+  attachInterrupt(D6, seizureAlert, FALLING);
+  configureBLE();
+  Serial.begin(9600);
 //  System.on(button_status, button_handler)
 }
 
-// loop() runs over and over again, as quickly as it can execute.
-void loop() {
-  // The core of your code will likely live here.
-  configureBLE();
-  insBatteryLevelCharacteristicUuid.setValue(45);
-  insConnectionCharacteristicUuid.setValue(1);
-  ctmConnectionCharacteristicUuid.setValue(1);
-  tabletBatteryLevelCharacteristicUuid.setValue(85);
-  tabletDiskSpaceCharacteristicUuid.setValue(55);
-  tabletConnectionCharacteristicUuid.setValue(1);
+uint64_t timer = 0;
+bool seizure = false;
+float insBattery = 100;
+float tabletBattery = 100;
+float tabletDiskSpace = 100;
 
-  digitalWrite(D7, HIGH);
-  BLE.advertise(&advData);
-  delay(5000);
-  BLE.stopAdvertising();
-  BLE.disconnect();
-  digitalWrite(D7, LOW);
-  delay(5 * 60 * 1000);
+void loop() {
+  if(timer % (4 * 60) == 0) {
+    Serial.printlnf("Triggered at %d minutes", timer / (4 * 60));
+    insBatteryLevelCharacteristicUuid.setValue((int)insBattery);
+    insConnectionCharacteristicUuid.setValue(1);
+    ctmConnectionCharacteristicUuid.setValue(1);
+    tabletBatteryLevelCharacteristicUuid.setValue((int)tabletBattery);
+    tabletDiskSpaceCharacteristicUuid.setValue((int)tabletDiskSpace);
+    tabletConnectionCharacteristicUuid.setValue(1);
+
+    insBattery = insBattery - 0.5;
+    tabletBattery = tabletBattery - 0.7;
+    tabletDiskSpace = tabletDiskSpace - 0.3;
+
+    if(insBattery < 0) {
+      insBattery = 0;
+    }
+    if(tabletBattery < 0) {
+      tabletBattery = 0;
+    }
+    if(tabletDiskSpace < 0) {
+      tabletDiskSpace = 0;
+    }
+    BLE.on();
+
+    BLE.advertise(&advData);
+    delay(5000);
+    BLE.stopAdvertising();
+    BLE.off();
+  }
+
+  if(seizure == true) {
+    if(digitalRead(D6) == LOW) {
+      seizureAlertCharacteristicUuid.setValue(1);
+      BLE.advertise(&advData);
+      delay(5000);
+      BLE.stopAdvertising();
+      BLE.off();
+      seizureAlertCharacteristicUuid.setValue(0);
+      seizure = false;
+      // delay(5000);
+      // BLE.stopAdvertising();
+    }
+  }
+  
+  timer++;
+  delay(1000);
+}
+
+void seizureAlert()
+{
+  seizure = true;
 }
