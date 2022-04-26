@@ -6,5 +6,7 @@
       "*.ino": "cpp",
       "string": "cpp",
       "iosfwd": "cpp"
-    }
+    },
+    "particle.targetPlatform": "argon",
+    "particle.firmwareVersion": "3.3.0"
 }
