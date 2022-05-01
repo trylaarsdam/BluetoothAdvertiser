@@ -22,12 +22,12 @@ BleAdvertisingData advData;
 
 void connectCallback(const BlePeerDevice& peer, void* context){
   // Serial.println("BLE_Connected");
-  digitalWrite(D7, HIGH);
+  // digitalWrite(D7, HIGH);
 }
 
 void disconnectCallback(const BlePeerDevice& peer, void* context){
   // Serial.println("BLE_Disconnected");
-  digitalWrite(D7, LOW);
+  // digitalWrite(D7, LOW);
 }
 
 void configureBLE()
@@ -98,19 +98,22 @@ void loop() {
       tabletDiskSpace = 0;
     }
     BLE.on();
-
+    digitalWrite(D7, HIGH);
     BLE.advertise(&advData);
-    delay(5000);
+    delay(30000);
     BLE.stopAdvertising();
+    digitalWrite(D7, LOW);
     BLE.off();
   }
 
   if(seizure == true) {
     if(digitalRead(D6) == LOW) {
       seizureAlertCharacteristicUuid.setValue(1);
+      digitalWrite(D7, HIGH);
       BLE.advertise(&advData);
-      delay(5000);
+      delay(30000);
       BLE.stopAdvertising();
+      digitalWrite(D7, LOW);
       BLE.off();
       seizureAlertCharacteristicUuid.setValue(0);
       seizure = false;
