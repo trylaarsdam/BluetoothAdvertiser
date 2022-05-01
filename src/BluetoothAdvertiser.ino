@@ -1,12 +1,21 @@
 SYSTEM_MODE(MANUAL);
 SYSTEM_THREAD(ENABLED);
 
-/*
- * Project BluetoothAdvertiser
- * Description:
- * Author: trylaarsdam
- * Date:
- */
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+#define BUTTON_A D4
+#define BUTTON_B D3
+#define BUTTON_C D2
+#define SSD1306_WHITE 1
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 const BleUuid serviceUuid("b025071e-09df-418a-beff-f64aea621700");
 
@@ -20,14 +29,41 @@ BleCharacteristic seizureAlertCharacteristicUuid("seizureAlert", BleCharacterist
 
 BleAdvertisingData advData;
 
+enum states{waiting, startAdvertising, advertising, connected, disconnect, cancelAdvertising, setSeizureDetect};
+
+states state;
+
+void connectionTimerExpired() {
+    Serial.println("Connection timer fired...");
+    state = disconnect;
+}
+Timer connectedTimer(5000, connectionTimerExpired, true);
+
+void advertisingTimerFired() {
+    Serial.println("Advertising timer fired...");
+    state = cancelAdvertising;
+}
+Timer advertisingTimer(10000, advertisingTimerFired, true);
+
+void waitingTimerFired() {
+    Serial.println("Waiting timer fired...");
+    state = startAdvertising;
+}
+Timer waitingTimer(15000, waitingTimerFired, true);
+
 void connectCallback(const BlePeerDevice& peer, void* context){
-  // Serial.println("BLE_Connected");
-  // digitalWrite(D7, HIGH);
+  state = connected;
+  BLE.stopAdvertising();
+  advertisingTimer.stop();
+  waitingTimer.stop();
+  connectedTimer.start();
 }
 
 void disconnectCallback(const BlePeerDevice& peer, void* context){
-  // Serial.println("BLE_Disconnected");
-  // digitalWrite(D7, LOW);
+  state = waiting;
+  connectedTimer.stop();
+  advertisingTimer.stop();
+  waitingTimer.start();
 }
 
 void configureBLE()
@@ -46,37 +82,98 @@ void configureBLE()
   advData.appendServiceUUID(serviceUuid);  
 }
 
-// void button_handler(system_event_t event, int duration, void* )
-// {
-//   if (!duration) {
-//     digitialWrite(D7, HIGH);
-//   }
-// }
-
-void seizureAlert(void);
-
 // setup() runs once, when the device is first turned on.
 void setup() {
+  Serial.begin(9600);
+  //while (!Serial.isConnected()) {}
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+  pinMode(BUTTON_A, INPUT_PULLUP);
+  pinMode(BUTTON_B, INPUT_PULLUP);
+  pinMode(BUTTON_C, INPUT_PULLUP);  
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.clearDisplay();
+  display.print("ETablet Simulator");
+  display.display();
+  delay(1000);
+
   BLE.on();
   BLE.onConnected(connectCallback);
   BLE.onDisconnected(disconnectCallback);
   pinMode(D7, OUTPUT);
-  pinMode(D6, INPUT_PULLUP);
-  attachInterrupt(D6, seizureAlert, FALLING);
   configureBLE();
-  Serial.begin(9600);
-//  System.on(button_status, button_handler)
+
+  state = waiting;
+  connectedTimer.stop();
+  advertisingTimer.stop();
+  waitingTimer.start();
 }
 
-uint64_t timer = 0;
 bool seizure = false;
 float insBattery = 100;
 float tabletBattery = 100;
 float tabletDiskSpace = 100;
 
 void loop() {
-  if(timer % (4 * 60) == 0) {
-    Serial.printlnf("Triggered at %d minutes", timer / (4 * 60));
+  if (!digitalRead(BUTTON_A)) {
+    if (state == waiting) {
+      state = startAdvertising;
+    }
+  }
+  switch(state) {
+    case waiting:
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.print("waiting...");
+        display.display();
+        break;
+    case startAdvertising:
+        waitingTimer.stop();
+        connectedTimer.stop();
+        advertisingTimer.start();
+        updateCharacteristicValues();
+        BLE.advertise(&advData);
+        state = advertising;
+        break;
+    case advertising:
+        digitalWrite(D7, HIGH);
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.print("advertising...");
+        display.display();
+        break;
+    case cancelAdvertising:
+        digitalWrite(D7, LOW);
+        BLE.stopAdvertising();
+        advertisingTimer.stop();
+        waitingTimer.start();
+        state = waiting;
+        break;
+    case connected:
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.print("connected...");
+        display.display();
+        break;
+    case disconnect:
+        digitalWrite(D7, LOW);
+        BLE.disconnectAll();
+        BLE.stopAdvertising();
+        connectedTimer.stop();
+        advertisingTimer.stop();
+        waitingTimer.start();
+        state = waiting;
+  }
+}
+
+void updateCharacteristicValues() {
     insBatteryLevelCharacteristicUuid.setValue((int)insBattery);
     insConnectionCharacteristicUuid.setValue(1);
     ctmConnectionCharacteristicUuid.setValue(1);
@@ -97,36 +194,4 @@ void loop() {
     if(tabletDiskSpace < 0) {
       tabletDiskSpace = 0;
     }
-    BLE.on();
-    digitalWrite(D7, HIGH);
-    BLE.advertise(&advData);
-    delay(30000);
-    BLE.stopAdvertising();
-    digitalWrite(D7, LOW);
-    BLE.off();
-  }
-
-  if(seizure == true) {
-    if(digitalRead(D6) == LOW) {
-      seizureAlertCharacteristicUuid.setValue(1);
-      digitalWrite(D7, HIGH);
-      BLE.advertise(&advData);
-      delay(30000);
-      BLE.stopAdvertising();
-      digitalWrite(D7, LOW);
-      BLE.off();
-      seizureAlertCharacteristicUuid.setValue(0);
-      seizure = false;
-      // delay(5000);
-      // BLE.stopAdvertising();
-    }
-  }
-  
-  timer++;
-  delay(1000);
-}
-
-void seizureAlert()
-{
-  seizure = true;
 }
