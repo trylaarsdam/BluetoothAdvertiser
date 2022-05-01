@@ -12,6 +12,8 @@ void disconnectCallback(const BlePeerDevice& peer, void* context);
 void configureBLE();
 void setup();
 void loop();
+void setSeizure();
+void clearSeizure();
 void updateCharacteristicValues();
 #line 1 "/Users/kevinmcquown/Documents/Projects/Mayo/BluetoothAdvertiser/src/BluetoothAdvertiser.ino"
 SYSTEM_MODE(MANUAL);
@@ -28,6 +30,7 @@ SYSTEM_THREAD(ENABLED);
 #define BUTTON_B D3
 #define BUTTON_C D2
 #define SSD1306_WHITE 1
+#define kWaitingTimerBetweenAdvertisements 4 * 60000
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -65,7 +68,7 @@ void waitingTimerFired() {
     Serial.println("Waiting timer fired...");
     state = startAdvertising;
 }
-Timer waitingTimer(15000, waitingTimerFired, true);
+Timer waitingTimer(kWaitingTimerBetweenAdvertisements, waitingTimerFired, true);
 
 void connectCallback(const BlePeerDevice& peer, void* context){
   state = connected;
@@ -143,8 +146,15 @@ void loop() {
       state = startAdvertising;
     }
   }
+  if (!digitalRead(BUTTON_C)) {
+    if (state == waiting) {
+      setSeizure();
+      state = startAdvertising;
+    }
+  }
   switch(state) {
     case waiting:
+        clearSeizure();
         display.clearDisplay();
         display.setCursor(0,0);
         display.print("waiting...");
@@ -187,6 +197,13 @@ void loop() {
         waitingTimer.start();
         state = waiting;
   }
+}
+
+void setSeizure() {
+    seizureAlertCharacteristicUuid.setValue(1);
+}
+void clearSeizure() {
+    seizureAlertCharacteristicUuid.setValue(0);
 }
 
 void updateCharacteristicValues() {
