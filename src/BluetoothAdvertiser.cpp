@@ -4,9 +4,6 @@
 
 #include "Particle.h"
 #line 1 "/Users/kevinmcquown/Documents/Projects/Mayo/BluetoothAdvertiser/src/BluetoothAdvertiser.ino"
-void connectionTimerExpired();
-void advertisingTimerFired();
-void waitingTimerFired();
 void connectCallback(const BlePeerDevice& peer, void* context);
 void disconnectCallback(const BlePeerDevice& peer, void* context);
 void configureBLE();
@@ -15,6 +12,7 @@ void loop();
 void setSeizure();
 void clearSeizure();
 void updateCharacteristicValues();
+void handleTimedEvents();
 #line 1 "/Users/kevinmcquown/Documents/Projects/Mayo/BluetoothAdvertiser/src/BluetoothAdvertiser.ino"
 SYSTEM_MODE(MANUAL);
 SYSTEM_THREAD(ENABLED);
@@ -31,6 +29,7 @@ SYSTEM_THREAD(ENABLED);
 #define BUTTON_C D2
 #define SSD1306_WHITE 1
 #define kWaitingTimerBetweenAdvertisements 4 * 60000
+//#define kWaitingTimerBetweenAdvertisements 30000
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -52,37 +51,50 @@ enum states{waiting, startAdvertising, advertising, connected, disconnect, cance
 
 states state;
 
-void connectionTimerExpired() {
-    Serial.println("Connection timer fired...");
-    state = disconnect;
-}
-Timer connectedTimer(5000, connectionTimerExpired, true);
+// void connectionTimerExpired() {
+//     Serial.println("Connection timer fired...");
+//     state = disconnect;
+// }
+// Timer connectedTimer(5000, connectionTimerExpired, true);
 
-void advertisingTimerFired() {
-    Serial.println("Advertising timer fired...");
-    state = cancelAdvertising;
-}
-Timer advertisingTimer(10000, advertisingTimerFired, true);
+// void advertisingTimerFired() {
+//     Serial.println("Advertising timer fired...");
+//     state = cancelAdvertising;
+// }
+// Timer advertisingTimer(10000, advertisingTimerFired, true);
 
-void waitingTimerFired() {
-    Serial.println("Waiting timer fired...");
-    state = startAdvertising;
-}
-Timer waitingTimer(kWaitingTimerBetweenAdvertisements, waitingTimerFired, true);
+// void waitingTimerFired() {
+//     Serial.println("Waiting timer fired...");
+//     state = startAdvertising;
+// }
+// Timer waitingTimer(kWaitingTimerBetweenAdvertisements, waitingTimerFired, true);
+
+unsigned long waitingTimer = 0;
+unsigned long advertisingTimer = 0;
+unsigned long connectionTimer = 0;
+bool waitingTimerTriggered = false;
+bool advertisingTimerTriggered = false;
+bool connectionTimerTriggered = false;
 
 void connectCallback(const BlePeerDevice& peer, void* context){
   state = connected;
   BLE.stopAdvertising();
-  advertisingTimer.stop();
-  waitingTimer.stop();
-  connectedTimer.start();
+  advertisingTimer = 0;
+  waitingTimer = 0;
+  connectionTimer = millis() + 5000;
+  // advertisingTimer.stop();
+  // waitingTimer.stop();
+  // connectedTimer.start();
 }
 
 void disconnectCallback(const BlePeerDevice& peer, void* context){
   state = waiting;
-  connectedTimer.stop();
-  advertisingTimer.stop();
-  waitingTimer.start();
+  connectionTimer = 0;
+  advertisingTimer = 0;
+  waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
+  // connectedTimer.stop();
+  // advertisingTimer.stop();
+  // waitingTimer.start();
 }
 
 void configureBLE()
@@ -130,9 +142,9 @@ void setup() {
   configureBLE();
 
   state = waiting;
-  connectedTimer.stop();
-  advertisingTimer.stop();
-  waitingTimer.start();
+  connectionTimer = 0;
+  advertisingTimer = 0;
+  waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
 }
 
 bool seizure = false;
@@ -141,6 +153,7 @@ float tabletBattery = 100;
 float tabletDiskSpace = 100;
 
 void loop() {
+  handleTimedEvents();
   if (!digitalRead(BUTTON_A)) {
     if (state == waiting) {
       state = startAdvertising;
@@ -159,11 +172,17 @@ void loop() {
         display.setCursor(0,0);
         display.print("waiting...");
         display.display();
+        if (waitingTimerTriggered) {
+          state = startAdvertising;
+        }
         break;
     case startAdvertising:
-        waitingTimer.stop();
-        connectedTimer.stop();
-        advertisingTimer.start();
+        connectionTimer = 0;
+        advertisingTimer = millis() + 10000;
+        waitingTimer = 0;
+        // waitingTimer.stop();
+        // connectedTimer.stop();
+        // advertisingTimer.start();
         updateCharacteristicValues();
         BLE.advertise(&advData);
         state = advertising;
@@ -174,12 +193,18 @@ void loop() {
         display.setCursor(0,0);
         display.print("advertising...");
         display.display();
+        if (advertisingTimerTriggered) {
+          state = cancelAdvertising;
+        }
         break;
     case cancelAdvertising:
         digitalWrite(D7, LOW);
         BLE.stopAdvertising();
-        advertisingTimer.stop();
-        waitingTimer.start();
+        connectionTimer = 0;
+        advertisingTimer = 0;
+        waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
+        // advertisingTimer.stop();
+        // waitingTimer.start();
         state = waiting;
         break;
     case connected:
@@ -187,14 +212,20 @@ void loop() {
         display.setCursor(0,0);
         display.print("connected...");
         display.display();
+        if (connectionTimerTriggered) {
+          state = disconnect;
+        }
         break;
     case disconnect:
         digitalWrite(D7, LOW);
         BLE.disconnectAll();
         BLE.stopAdvertising();
-        connectedTimer.stop();
-        advertisingTimer.stop();
-        waitingTimer.start();
+        connectionTimer = 0;
+        advertisingTimer = 0;
+        waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
+        // connectedTimer.stop();
+        // advertisingTimer.stop();
+        // waitingTimer.start();
         state = waiting;
   }
 }
@@ -214,9 +245,9 @@ void updateCharacteristicValues() {
     tabletDiskSpaceCharacteristicUuid.setValue((int)tabletDiskSpace);
     tabletConnectionCharacteristicUuid.setValue(1);
 
-    insBattery = insBattery - 0.5;
-    tabletBattery = tabletBattery - 0.7;
-    tabletDiskSpace = tabletDiskSpace - 0.3;
+    insBattery = insBattery - 0.3;
+    tabletBattery = tabletBattery - 0.2;
+    tabletDiskSpace = tabletDiskSpace - 0.1;
 
     if(insBattery < 0) {
       insBattery = 0;
@@ -227,4 +258,28 @@ void updateCharacteristicValues() {
     if(tabletDiskSpace < 0) {
       tabletDiskSpace = 0;
     }
+}
+
+void handleTimedEvents() {
+  connectionTimerTriggered = false;
+  waitingTimerTriggered = false;
+  advertisingTimerTriggered = false;
+  if (connectionTimer > 0) {
+    if (connectionTimer < millis()) {
+      connectionTimerTriggered = true;
+      connectionTimer = 0;
+    }
+  }
+  if (advertisingTimer > 0) {
+    if (advertisingTimer < millis()) {
+      advertisingTimerTriggered = true;
+      advertisingTimer = 0;
+    }
+  }
+  if (waitingTimer > 0) {
+    if (waitingTimer < millis()) {
+      waitingTimerTriggered = true;
+      waitingTimer = 0;
+    }
+  }
 }
