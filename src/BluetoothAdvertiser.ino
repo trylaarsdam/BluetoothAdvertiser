@@ -35,40 +35,32 @@ enum states{waiting, startAdvertising, advertising, connected, disconnect, cance
 
 states state;
 
-// void connectionTimerExpired() {
-//     Serial.println("Connection timer fired...");
-//     state = disconnect;
-// }
-// Timer connectedTimer(5000, connectionTimerExpired, true);
-
-// void advertisingTimerFired() {
-//     Serial.println("Advertising timer fired...");
-//     state = cancelAdvertising;
-// }
-// Timer advertisingTimer(10000, advertisingTimerFired, true);
-
-// void waitingTimerFired() {
-//     Serial.println("Waiting timer fired...");
-//     state = startAdvertising;
-// }
-// Timer waitingTimer(kWaitingTimerBetweenAdvertisements, waitingTimerFired, true);
+unsigned long currentElapstedTimeToConnect = 0;
+unsigned long finalElapsedTimeToConnect = 0;
+unsigned long totalFinalElapsedTimeToConnect = 0;
+unsigned long minTimeToConnect = 500000;
+unsigned long maxTimeToConnect = 0;
+unsigned long connectionCount = 0;
 
 unsigned long waitingTimer = 0;
 unsigned long advertisingTimer = 0;
 unsigned long connectionTimer = 0;
+
 bool waitingTimerTriggered = false;
 bool advertisingTimerTriggered = false;
 bool connectionTimerTriggered = false;
 
 void connectCallback(const BlePeerDevice& peer, void* context){
   state = connected;
+  finalElapsedTimeToConnect = millis() - currentElapstedTimeToConnect;
+  connectionCount++;
+  minTimeToConnect = min(minTimeToConnect, finalElapsedTimeToConnect);
+  maxTimeToConnect = max(maxTimeToConnect, finalElapsedTimeToConnect);
+  totalFinalElapsedTimeToConnect = totalFinalElapsedTimeToConnect + finalElapsedTimeToConnect;
   BLE.stopAdvertising();
   advertisingTimer = 0;
   waitingTimer = 0;
   connectionTimer = millis() + 5000;
-  // advertisingTimer.stop();
-  // waitingTimer.stop();
-  // connectedTimer.start();
 }
 
 void disconnectCallback(const BlePeerDevice& peer, void* context){
@@ -115,9 +107,10 @@ void setup() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.clearDisplay();
-  display.print("ETablet Simulator");
+  display.setCursor(30, 15);
+  display.print("ePad Sim v1");
   display.display();
-  delay(1000);
+  delay(3000);
 
   BLE.on();
   BLE.onConnected(connectCallback);
@@ -141,12 +134,22 @@ void loop() {
   if (!digitalRead(BUTTON_A)) {
     if (state == waiting) {
       state = startAdvertising;
+      currentElapstedTimeToConnect = millis();
+    }
+  }
+  if (!digitalRead(BUTTON_B)) {
+    if (state == waiting) {
+      totalFinalElapsedTimeToConnect = 0;
+      minTimeToConnect = 50000;
+      maxTimeToConnect = 0;
+      connectionCount = 0;
     }
   }
   if (!digitalRead(BUTTON_C)) {
     if (state == waiting) {
       setSeizure();
       state = startAdvertising;
+      currentElapstedTimeToConnect = millis();
     }
   }
   switch(state) {
@@ -154,19 +157,30 @@ void loop() {
         clearSeizure();
         display.clearDisplay();
         display.setCursor(0,0);
-        display.print("waiting...");
+        display.print("A <- Advertise    ");
+        display.print((waitingTimer - millis()) / 1000);
+        display.println("s");
+        display.println("B <- Reset Analytics");
+        display.println("C <- Seizure Detect!");
+        if (connectionCount > 0) {
+          display.print(minTimeToConnect);
+          display.print(" - ");
+          display.print(totalFinalElapsedTimeToConnect / connectionCount);
+          display.print(" - ");
+          display.print(maxTimeToConnect);
+          display.print(" ");
+          display.println(connectionCount);
+        }
         display.display();
         if (waitingTimerTriggered) {
           state = startAdvertising;
+          currentElapstedTimeToConnect = millis();
         }
         break;
     case startAdvertising:
         connectionTimer = 0;
-        advertisingTimer = millis() + 10000;
+        advertisingTimer = millis() + 10000; // advertise for a max of 10 seconds then give up
         waitingTimer = 0;
-        // waitingTimer.stop();
-        // connectedTimer.stop();
-        // advertisingTimer.start();
         updateCharacteristicValues();
         BLE.advertise(&advData);
         state = advertising;
@@ -175,8 +189,14 @@ void loop() {
         digitalWrite(D7, HIGH);
         display.clearDisplay();
         display.setCursor(0,0);
-        display.print("advertising...");
+        display.setTextSize(1);
+        display.print("   ...advertising...");
+        display.setCursor(30,18);
+        display.setTextSize(2);
+        display.print((millis() - currentElapstedTimeToConnect));
+        display.print(" ms");
         display.display();
+        display.setTextSize(1);
         if (advertisingTimerTriggered) {
           state = cancelAdvertising;
         }
@@ -187,14 +207,14 @@ void loop() {
         connectionTimer = 0;
         advertisingTimer = 0;
         waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
-        // advertisingTimer.stop();
-        // waitingTimer.start();
         state = waiting;
         break;
     case connected:
         display.clearDisplay();
-        display.setCursor(0,0);
-        display.print("connected...");
+        display.setCursor(0,15);
+        display.print("connected in ");
+        display.print(finalElapsedTimeToConnect);
+        display.print(" ms");
         display.display();
         if (connectionTimerTriggered) {
           state = disconnect;
