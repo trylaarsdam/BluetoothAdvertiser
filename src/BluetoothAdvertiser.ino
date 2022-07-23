@@ -12,8 +12,8 @@ SYSTEM_THREAD(ENABLED);
 #define BUTTON_B D3
 #define BUTTON_C D2
 #define SSD1306_WHITE 1
-#define kWaitingTimerBetweenAdvertisements 4 * 60000
-//#define kWaitingTimerBetweenAdvertisements 30000
+//#define kWaitingTimerBetweenAdvertisements 4 * 60000
+#define kWaitingTimerBetweenAdvertisements 30000
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
@@ -229,9 +229,9 @@ void updateCharacteristicValues() {
     tabletDiskSpaceCharacteristicUuid.setValue((int)tabletDiskSpace);
     tabletConnectionCharacteristicUuid.setValue(1);
 
-    insBattery = insBattery - 0.3;
-    tabletBattery = tabletBattery - 0.2;
-    tabletDiskSpace = tabletDiskSpace - 0.1;
+    insBattery = insBattery - 0.2;
+    tabletBattery = tabletBattery - 0.1;
+    tabletDiskSpace = tabletDiskSpace - 0.05;
 
     if(insBattery < 0) {
       insBattery = 0;
