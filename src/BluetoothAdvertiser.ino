@@ -238,7 +238,6 @@ void loop()
   {
     display.clearDisplay();
     display.setCursor(0, 0);
-    display.display();
     switch (wifiState)
     {
     case waitingToConnect:
