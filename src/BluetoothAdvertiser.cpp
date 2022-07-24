@@ -13,6 +13,7 @@ void loop();
 void setSeizure();
 void clearSeizure();
 void updateCharacteristicValues();
+void resetBatteryLevels();
 void handleTimedEvents();
 #line 1 "/Users/kevinmcquown/Documents/Projects/Mayo/BluetoothAdvertiser/src/BluetoothAdvertiser.ino"
 SYSTEM_MODE(MANUAL);
@@ -147,7 +148,7 @@ void setup() {
   display.setCursor(0,0);
   display.println("<- A Join WiFi");
   display.println("");
-  display.println("ePad Sim v1");
+  display.println("ePad Sim v1.1");
   display.display();
   while ((millis() < waitForWiFiTimer) && !onWiFi) {
       if (!digitalRead(BUTTON_A)) {
@@ -240,6 +241,8 @@ void loop() {
         }
         display.println("C <- Seizure Detect!");
         if (connectionCount > 0) {
+          // display.drawLine(0,24,128,24,1);
+          display.setCursor(0,25);
           display.print(minTimeToConnect);
           display.print(" - ");
           display.print(totalFinalElapsedTimeToConnect / connectionCount);
@@ -288,11 +291,14 @@ void loop() {
         break;
     case connected:
         display.clearDisplay();
-        display.setCursor(0,15);
-        display.print("connected in ");
+        display.setCursor(0,0);
+        display.print("connected in ...");
+        display.setCursor(30,18);
+        display.setTextSize(2);
         display.print(finalElapsedTimeToConnect);
         display.print(" ms");
         display.display();
+        display.setTextSize(1);
         if (connectionTimerTriggered) {
           state = disconnect;
         }
@@ -333,13 +339,21 @@ void updateCharacteristicValues() {
 
     if(insBattery < 0) {
       insBattery = 0;
+      resetBatteryLevels();
     }
     if(tabletBattery < 0) {
       tabletBattery = 0;
+      resetBatteryLevels();
     }
     if(tabletDiskSpace < 0) {
       tabletDiskSpace = 0;
+      resetBatteryLevels();
     }
+}
+void resetBatteryLevels() {
+      insBattery = 100;
+      tabletBattery = 100;
+      tabletDiskSpace = 100;
 }
 
 void handleTimedEvents() {
