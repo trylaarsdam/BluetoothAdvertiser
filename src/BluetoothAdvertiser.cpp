@@ -6,6 +6,7 @@
 #line 1 "/Users/kevinmcquown/Documents/Projects/Mayo/BluetoothAdvertiser/src/BluetoothAdvertiser.ino"
 void connectCallback(const BlePeerDevice& peer, void* context);
 void disconnectCallback(const BlePeerDevice& peer, void* context);
+void setAdvertisingManufacturingData(bool alert);
 void configureBLE();
 void setup();
 void loop();
@@ -47,10 +48,13 @@ BleCharacteristic seizureAlertCharacteristicUuid("seizureAlert", BleCharacterist
 
 BleAdvertisingData advData;
 
-enum states{waiting, startAdvertising, advertising, connected, disconnect, cancelAdvertising, setSeizureDetect};
+enum states {waiting, startAdvertising, advertising, connected, disconnect, cancelAdvertising, setSeizureDetect};
+enum wifiStates {waitingToConnect, connectingToParticle, connectedToParticle};
 
 states state;
+wifiStates wifiState;
 
+bool useAdvertisingPacketForSeizureAlert = false;
 unsigned long currentElapstedTimeToConnect = 0;
 unsigned long finalElapsedTimeToConnect = 0;
 unsigned long totalFinalElapsedTimeToConnect = 0;
@@ -65,6 +69,11 @@ unsigned long connectionTimer = 0;
 bool waitingTimerTriggered = false;
 bool advertisingTimerTriggered = false;
 bool connectionTimerTriggered = false;
+
+bool onWiFi = false;
+unsigned long waitForWiFiTimer = 5000 + millis();
+
+uint8_t buf[BLE_MAX_ADV_DATA_LEN];
 
 void connectCallback(const BlePeerDevice& peer, void* context){
   state = connected;
@@ -84,15 +93,26 @@ void disconnectCallback(const BlePeerDevice& peer, void* context){
   connectionTimer = 0;
   advertisingTimer = 0;
   waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
-  // connectedTimer.stop();
-  // advertisingTimer.stop();
-  // waitingTimer.start();
+}
+
+void setAdvertisingManufacturingData(bool alert) {
+  if (alert) {
+    buf[0] = 0xFF;
+    buf[1] = 0xFF;
+    buf[2] = useAdvertisingPacketForSeizureAlert ? 0x01 : 0x00;
+  } else {
+    buf[0] = 0xFF;
+    buf[1] = 0xFF;
+    buf[2] = 0x00;
+  }
+  advData.appendCustomData(buf, 3);
 }
 
 void configureBLE()
 {
   // BLE.on();
   BLE.setDeviceName("Tablet");
+  
   BLE.addCharacteristic(tabletBatteryLevelCharacteristicUuid);
   BLE.addCharacteristic(insBatteryLevelCharacteristicUuid);
   BLE.addCharacteristic(insConnectionCharacteristicUuid);
@@ -103,6 +123,7 @@ void configureBLE()
 
   // Advertise our private service only
   advData.appendServiceUUID(serviceUuid);  
+  setAdvertisingManufacturingData(false);
 }
 
 // setup() runs once, when the device is first turned on.
@@ -123,10 +144,19 @@ void setup() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_WHITE);
   display.clearDisplay();
-  display.setCursor(30, 15);
-  display.print("ePad Sim v1");
+  display.setCursor(0,0);
+  display.println("<- A Join WiFi");
+  display.println("");
+  display.println("ePad Sim v1");
   display.display();
-  delay(3000);
+  while ((millis() < waitForWiFiTimer) && !onWiFi) {
+      if (!digitalRead(BUTTON_A)) {
+        onWiFi = true;
+        WiFi.on();
+        WiFi.connect();
+        wifiState = waitingToConnect;
+      }
+  }
 
   BLE.on();
   BLE.onConnected(connectCallback);
@@ -146,26 +176,53 @@ float tabletBattery = 100;
 float tabletDiskSpace = 100;
 
 void loop() {
+  // This mode is used to get on WiFi for OTA updates.
+  if (onWiFi) {
+        display.clearDisplay();
+        display.setCursor(0,0);
+        switch(wifiState) {
+          case waitingToConnect:
+            display.println("Joining WiFi...");
+            display.println("");
+            display.println("Antenna Connected?");
+            if (WiFi.ready()) {
+              wifiState = connectingToParticle;
+              Particle.connect();
+            }
+          break;
+          case connectingToParticle:
+            display.println("Finding Particle ...");
+            if (Particle.connected()) {
+              wifiState = connectedToParticle;
+            }
+          break;
+          case connectedToParticle:
+            display.println("Waiting for OTA ...");
+          break;
+        }
+        display.display();
+        return;
+  }
   handleTimedEvents();
   if (!digitalRead(BUTTON_A)) {
     if (state == waiting) {
       state = startAdvertising;
       currentElapstedTimeToConnect = millis();
+      setAdvertisingManufacturingData(false);
     }
   }
+
   if (!digitalRead(BUTTON_B)) {
-    if (state == waiting) {
-      totalFinalElapsedTimeToConnect = 0;
-      minTimeToConnect = 50000;
-      maxTimeToConnect = 0;
-      connectionCount = 0;
-    }
+    useAdvertisingPacketForSeizureAlert = !useAdvertisingPacketForSeizureAlert;
+    delay(200);
   }
+
   if (!digitalRead(BUTTON_C)) {
     if (state == waiting) {
       setSeizure();
       state = startAdvertising;
       currentElapstedTimeToConnect = millis();
+      setAdvertisingManufacturingData(true);
     }
   }
   switch(state) {
@@ -176,7 +233,11 @@ void loop() {
         display.print("A <- Advertise    ");
         display.print((waitingTimer - millis()) / 1000);
         display.println("s");
-        display.println("B <- Reset Analytics");
+        if (useAdvertisingPacketForSeizureAlert) {
+          display.println("B <- Fast Mode: On");
+        } else {
+          display.println("B <- Fast Mode: Off");
+        }
         display.println("C <- Seizure Detect!");
         if (connectionCount > 0) {
           display.print(minTimeToConnect);
@@ -255,6 +316,7 @@ void setSeizure() {
 }
 void clearSeizure() {
     seizureAlertCharacteristicUuid.setValue(0);
+    setAdvertisingManufacturingData(false);
 }
 
 void updateCharacteristicValues() {

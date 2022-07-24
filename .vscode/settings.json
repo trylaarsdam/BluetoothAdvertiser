@@ -8,5 +8,6 @@
       "iosfwd": "cpp"
     },
     "particle.targetPlatform": "argon",
-    "particle.firmwareVersion": "3.3.0"
+    "particle.firmwareVersion": "3.3.0",
+    "particle.targetDevice": "ePad_Sim_KLM"
 }
