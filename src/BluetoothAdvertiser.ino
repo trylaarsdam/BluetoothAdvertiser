@@ -21,7 +21,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 uint8_t packetNumber;
 String temp = String("b025071e-09df-418a-beff-f64aea62170");
-String serviceUUIDString = temp + String(EEPROM.read(0x00));
+String serviceUUIDString = temp + String(getPacketNumber());
 
 const BleUuid serviceUuid(serviceUUIDString.c_str());
 
@@ -137,6 +137,7 @@ void configureBLE()
 // setup() runs once, when the device is first turned on.
 void setup()
 {
+  WiFi.setCredentials("ncc1701d","iggyogden1");
   Serial.begin(9600);
   // while (!Serial.isConnected()) {}
   // Serial.println(serviceUUIDString);
@@ -467,5 +468,10 @@ void handleTimedEvents()
   }
 }
 uint8_t getPacketNumber() {
-  return 1;
+  uint8_t number = EEPROM.read(0x00);
+  if (number == 0xFF) {
+    number = 0;
+    EEPROM.write(0x00, 0);
+  }
+  return number;
 }
