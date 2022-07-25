@@ -31,7 +31,11 @@ SYSTEM_THREAD(ENABLED);
 #define BUTTON_B D3
 #define BUTTON_C D2
 #define SSD1306_WHITE 1
-//#define kWaitingTimerBetweenAdvertisements 4 * 60000
+
+// Amount of time we stay connected to give phone ample time to read values from all characteristics
+// This can be a somewhat lengthy time when app is in background
+#define kConnectionTime 5000
+
 #define kWaitingTimerBetweenAdvertisements 30000
 
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
@@ -107,7 +111,7 @@ void connectCallback(const BlePeerDevice &peer, void *context)
   BLE.stopAdvertising();
   advertisingTimer = 0;
   waitingTimer = 0;
-  connectionTimer = millis() + 5000;
+  connectionTimer = millis() + kConnectionTime;
 }
 
 void disconnectCallback(const BlePeerDevice &peer, void *context)
@@ -137,7 +141,6 @@ void setAdvertisingManufacturingData(bool alert)
 
 void configureBLE()
 {
-  // BLE.on();
   BLE.setDeviceName("Tablet");
 
   BLE.addCharacteristic(tabletBatteryLevelCharacteristicUuid);
@@ -158,9 +161,6 @@ void setup()
 {
   WiFi.setCredentials("ncc1701d","iggyogden1");
   Serial.begin(9600);
-  // while (!Serial.isConnected()) {}
-  // Serial.println(serviceUUIDString);
-  // while (true) {}
   packetNumber = EEPROM.read(0x00);
   if (packetNumber == 0xFF) {
     packetNumber = 0;
@@ -307,7 +307,6 @@ void loop()
       setSeizure();
       state = startAdvertising;
       currentElapstedTimeToConnect = millis();
-      setAdvertisingManufacturingData(true);
     }
   }
   switch (state)
@@ -384,10 +383,13 @@ void loop()
     display.clearDisplay();
     display.setCursor(0, 0);
     display.print("connected in ...");
-    display.setCursor(30, 18);
+    display.setCursor(30, 16);
     display.setTextSize(2);
     display.print(finalElapsedTimeToConnect);
     display.print(" ms");
+    // display.setTextSize(1);
+    // display.setCursor(100,0);
+    // display.print((connectionTimer - millis())/1000);
     display.display();
     display.setTextSize(1);
     if (connectionTimerTriggered)
@@ -402,9 +404,6 @@ void loop()
     connectionTimer = 0;
     advertisingTimer = 0;
     waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
-    // connectedTimer.stop();
-    // advertisingTimer.stop();
-    // waitingTimer.start();
     state = waiting;
   }
 }
@@ -412,6 +411,7 @@ void loop()
 void setSeizure()
 {
   seizureAlertCharacteristicUuid.setValue(1);
+  setAdvertisingManufacturingData(true);
 }
 void clearSeizure()
 {
