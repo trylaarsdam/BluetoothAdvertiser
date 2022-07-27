@@ -6,7 +6,6 @@
 #line 1 "/Users/kevinmcquown/Documents/Projects/Mayo/BluetoothAdvertiser/src/BluetoothAdvertiser.ino"
 void connectCallback(const BlePeerDevice &peer, void *context);
 void disconnectCallback(const BlePeerDevice &peer, void *context);
-void setAdvertisingManufacturingData(bool alert);
 void configureBLE();
 void setup();
 void loop();
@@ -43,10 +42,15 @@ SYSTEM_THREAD(ENABLED);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 uint8_t packetNumber;
-String temp = String("b025071e-09df-418a-beff-f64aea62170");
-String serviceUUIDString = temp + String(getPacketNumber());
+
+String statusServiceUUID = String("b025071e-09df-418a-beff-f64aea62170");
+String serviceUUIDString = statusServiceUUID + String(getPacketNumber());
+
+String seizureServiceUUID = String("31410683-B0E4-434B-A745-4F1DB7AB570");
+String seizureUUIDString = seizureServiceUUID + String(getPacketNumber());
 
 const BleUuid serviceUuid(serviceUUIDString.c_str());
+const BleUuid seizureUuid(seizureUUIDString.c_str());
 
 BleCharacteristic insBatteryLevelCharacteristicUuid("insBatteryLevel", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("b026072e-09df-418a-beff-f64aea621766"), serviceUuid);
 BleCharacteristic insConnectionCharacteristicUuid("insConnection", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("B027073E-09DF-418A-BEFF-F64AEA621767"), serviceUuid);
@@ -57,6 +61,7 @@ BleCharacteristic tabletConnectionCharacteristicUuid("tabletConnection", BleChar
 BleCharacteristic seizureAlertCharacteristicUuid("seizureAlert", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("8329a311-aedd-4ffe-b0ab-def64a994b53"), serviceUuid);
 
 BleAdvertisingData advData;
+BleAdvertisingData seizureAdvData;
 
 enum states
 {
@@ -78,7 +83,9 @@ enum wifiStates
 states state;
 wifiStates wifiState;
 
-bool useAdvertisingPacketForSeizureAlert = false;
+bool seizureFastModeOn = false;
+bool seizureDetectTrigger = false;
+
 unsigned long currentElapstedTimeToConnect = 0;
 unsigned long finalElapsedTimeToConnect = 0;
 unsigned long totalFinalElapsedTimeToConnect = 0;
@@ -122,22 +129,22 @@ void disconnectCallback(const BlePeerDevice &peer, void *context)
   waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
 }
 
-void setAdvertisingManufacturingData(bool alert)
-{
-  if (alert)
-  {
-    buf[0] = 0xFF;
-    buf[1] = 0xFF;
-    buf[2] = useAdvertisingPacketForSeizureAlert ? 0x01 : 0x00;
-  }
-  else
-  {
-    buf[0] = 0xFF;
-    buf[1] = 0xFF;
-    buf[2] = 0x00;
-  }
-  advData.appendCustomData(buf, 3);
-}
+// void setAdvertisingManufacturingData(bool alert)
+// {
+//   if (alert)
+//   {
+//     buf[0] = 0xFF;
+//     buf[1] = 0xFF;
+//     buf[2] = seizureFastModeOn ? 0x01 : 0x00;
+//   }
+//   else
+//   {
+//     buf[0] = 0xFF;
+//     buf[1] = 0xFF;
+//     buf[2] = 0x00;
+//   }
+//   advData.appendCustomData(buf, 3);
+// }
 
 void configureBLE()
 {
@@ -153,7 +160,7 @@ void configureBLE()
 
   // Advertise our private service only
   advData.appendServiceUUID(serviceUuid);
-  setAdvertisingManufacturingData(false);
+  seizureAdvData.appendServiceUUID(seizureUuid);
 }
 
 // setup() runs once, when the device is first turned on.
@@ -285,6 +292,8 @@ void loop()
     display.display();
     return;
   }
+
+  // Start of main loop functionality
   handleTimedEvents();
   if (!digitalRead(BUTTON_A))
   {
@@ -292,13 +301,12 @@ void loop()
     {
       state = startAdvertising;
       currentElapstedTimeToConnect = millis();
-      setAdvertisingManufacturingData(false);
     }
   }
 
   if (!digitalRead(BUTTON_B))
   {
-    useAdvertisingPacketForSeizureAlert = !useAdvertisingPacketForSeizureAlert;
+    seizureFastModeOn = !seizureFastModeOn;
     delay(200);
   }
 
@@ -306,7 +314,8 @@ void loop()
   {
     if (state == waiting)
     {
-      setSeizure();
+      setSeizure(); // updates characteristic value with a 1
+      seizureDetectTrigger = true;
       state = startAdvertising;
       currentElapstedTimeToConnect = millis();
     }
@@ -320,7 +329,7 @@ void loop()
     display.print("A <- Advertise    ");
     display.print((waitingTimer - millis()) / 1000);
     display.println("s");
-    if (useAdvertisingPacketForSeizureAlert)
+    if (seizureFastModeOn)
     {
       display.println("B <- Fast Mode: On");
     }
@@ -353,7 +362,11 @@ void loop()
     advertisingTimer = millis() + 10000; // advertise for a max of 10 seconds then give up
     waitingTimer = 0;
     updateCharacteristicValues();
-    BLE.advertise(&advData);
+    if (seizureDetectTrigger && seizureFastModeOn) {
+      BLE.advertise(&seizureAdvData);
+    } else {
+      BLE.advertise(&advData);
+    }
     state = advertising;
     break;
   case advertising:
@@ -361,7 +374,11 @@ void loop()
     display.clearDisplay();
     display.setCursor(0, 0);
     display.setTextSize(1);
-    display.print("   ...advertising...");
+    if (seizureDetectTrigger && seizureFastModeOn) {
+      display.print("   ...adv: seizure...");
+    } else {
+      display.print("   ...adv: normal...");
+    }
     display.setCursor(30, 18);
     display.setTextSize(2);
     display.print((millis() - currentElapstedTimeToConnect));
@@ -376,6 +393,7 @@ void loop()
   case cancelAdvertising:
     digitalWrite(D7, LOW);
     BLE.stopAdvertising();
+    seizureDetectTrigger = false;
     connectionTimer = 0;
     advertisingTimer = 0;
     waitingTimer = millis() + (kWaitingTimerBetweenAdvertisements);
@@ -413,12 +431,10 @@ void loop()
 void setSeizure()
 {
   seizureAlertCharacteristicUuid.setValue(1);
-  setAdvertisingManufacturingData(true);
 }
 void clearSeizure()
 {
   seizureAlertCharacteristicUuid.setValue(0);
-  setAdvertisingManufacturingData(false);
 }
 
 void updateCharacteristicValues()
