@@ -141,6 +141,8 @@ void configureBLE()
 void setup()
 {
   WiFi.setCredentials("ncc1701d","iggyogden1");
+  WiFi.setCredentials("WCL","atmega328");
+  WiFi.setCredentials("LoopTracks", "atmega328");
   Serial.begin(9600);
   packetNumber = EEPROM.read(0x00);
   if (packetNumber == 0xFF) {
