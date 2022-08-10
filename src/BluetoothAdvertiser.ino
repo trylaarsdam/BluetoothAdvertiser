@@ -65,7 +65,7 @@ enum wifiStates
 states state;
 wifiStates wifiState;
 
-bool seizureFastModeOn = false;
+bool seizureFastModeOn = true;
 bool seizureDetectTrigger = false;
 
 unsigned long currentElapstedTimeToConnect = 0;

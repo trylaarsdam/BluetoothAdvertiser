@@ -83,7 +83,7 @@ enum wifiStates
 states state;
 wifiStates wifiState;
 
-bool seizureFastModeOn = false;
+bool seizureFastModeOn = true;
 bool seizureDetectTrigger = false;
 
 unsigned long currentElapstedTimeToConnect = 0;
@@ -192,7 +192,7 @@ void setup()
   display.setTextColor(SSD1306_WHITE);
   display.clearDisplay();
   display.setCursor(0, 0);
-  display.println("ePad Sim v1.1");
+  display.println("ePad Sim v1.2");
   display.println("<- A Join WiFi");
   display.println("<- B Adv Packet");
   display.display();
