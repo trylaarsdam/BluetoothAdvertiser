@@ -74,6 +74,7 @@ unsigned long totalFinalElapsedTimeToConnect = 0;
 unsigned long minTimeToConnect = 500000;
 unsigned long maxTimeToConnect = 0;
 unsigned long connectionCount = 0;
+unsigned long connectionFailed = 0;
 
 unsigned long waitingTimer = 0;
 unsigned long advertisingTimer = 0;
@@ -148,9 +149,8 @@ void configureBLE()
 // setup() runs once, when the device is first turned on.
 void setup()
 {
-  WiFi.setCredentials("ncc1701d","iggyogden1");
-  WiFi.setCredentials("WCL","atmega328");
-  WiFi.setCredentials("LoopTracks", "atmega328");
+  WiFi.setCredentials("CZGuest","Hoste46783");
+  WiFi.setCredentials("Silicon Washa,","Rodinka19");
   Serial.begin(9600);
   packetNumber = EEPROM.read(0x00);
   if (packetNumber == 0xFF) {
@@ -174,7 +174,7 @@ void setup()
   display.setTextColor(SSD1306_WHITE);
   display.clearDisplay();
   display.setCursor(0, 0);
-  display.println("ePad Sim v1.2");
+  display.println("ePad Sim v1.3");
   display.println("<- A Join WiFi");
   display.println("<- B Adv Packet");
   display.display();
@@ -325,12 +325,14 @@ void loop()
       // display.drawLine(0,24,128,24,1);
       display.setCursor(0, 25);
       display.print(minTimeToConnect);
-      display.print(" - ");
+      display.print("-");
       display.print(totalFinalElapsedTimeToConnect / connectionCount);
-      display.print(" - ");
+      display.print("-");
       display.print(maxTimeToConnect);
       display.print(" ");
-      display.println(connectionCount);
+      display.print(connectionCount);
+      display.print("/");
+      display.println(connectionFailed);
     }
     display.display();
     if (waitingTimerTriggered)
@@ -373,6 +375,7 @@ void loop()
     }
     break;
   case cancelAdvertising:
+    connectionFailed++;
     digitalWrite(D7, LOW);
     BLE.stopAdvertising();
     seizureDetectTrigger = false;
