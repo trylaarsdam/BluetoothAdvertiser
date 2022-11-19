@@ -28,11 +28,17 @@ uint8_t packetNumber;
 String statusServiceUUID = String("b025071e-09df-418a-beff-f64aea62170");
 String serviceUUIDString = statusServiceUUID + String(getPacketNumber());
 
+String newStatusServiceUUID = String("f3f21385-d121-4980-b553-e61e10682900");
+String newServiceUUIDString = newStatusServiceUUID + String(getPacketNumber());
+
 String seizureServiceUUID = String("31410683-B0E4-434B-A745-4F1DB7AB570");
 String seizureUUIDString = seizureServiceUUID + String(getPacketNumber());
 
 const BleUuid serviceUuid(serviceUUIDString.c_str());
+const BleUuid newServiceUuid(newServiceUUIDString.c_str());
 const BleUuid seizureUuid(seizureUUIDString.c_str());
+
+BleCharacteristic fullStatusCharacteristicUuid("fullStatusOfAllLevels", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("29eb3433-838d-4807-99d6-b81f743add8d"), newServiceUuid);
 
 BleCharacteristic insBatteryLevelCharacteristicUuid("insBatteryLevel", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("b026072e-09df-418a-beff-f64aea621766"), serviceUuid);
 BleCharacteristic insConnectionCharacteristicUuid("insConnection", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("B027073E-09DF-418A-BEFF-F64AEA621767"), serviceUuid);
@@ -42,7 +48,8 @@ BleCharacteristic tabletDiskSpaceCharacteristicUuid("tabletDiskSpace", BleCharac
 BleCharacteristic tabletConnectionCharacteristicUuid("tabletConnection", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("C255151D-6B19-438C-A001-5E4D12BC5947"), serviceUuid);
 BleCharacteristic seizureAlertCharacteristicUuid("seizureAlert", BleCharacteristicProperty::NOTIFY | BleCharacteristicProperty::READ, BleUuid("8329a311-aedd-4ffe-b0ab-def64a994b53"), serviceUuid);
 
-BleAdvertisingData advData;
+// BleAdvertisingData advData;
+BleAdvertisingData newAdvData;
 BleAdvertisingData seizureAdvData;
 
 enum states
@@ -133,16 +140,18 @@ void configureBLE()
 {
   BLE.setDeviceName("Tablet");
 
-  BLE.addCharacteristic(tabletBatteryLevelCharacteristicUuid);
-  BLE.addCharacteristic(insBatteryLevelCharacteristicUuid);
-  BLE.addCharacteristic(insConnectionCharacteristicUuid);
-  BLE.addCharacteristic(ctmConnectionCharacteristicUuid);
-  BLE.addCharacteristic(tabletConnectionCharacteristicUuid);
-  BLE.addCharacteristic(tabletDiskSpaceCharacteristicUuid);
-  BLE.addCharacteristic(seizureAlertCharacteristicUuid);
+  BLE.addCharacteristic(fullStatusCharacteristicUuid);
+  // BLE.addCharacteristic(tabletBatteryLevelCharacteristicUuid);
+  // BLE.addCharacteristic(insBatteryLevelCharacteristicUuid);
+  // BLE.addCharacteristic(insConnectionCharacteristicUuid);
+  // BLE.addCharacteristic(ctmConnectionCharacteristicUuid);
+  // BLE.addCharacteristic(tabletConnectionCharacteristicUuid);
+  // BLE.addCharacteristic(tabletDiskSpaceCharacteristicUuid);
+  // BLE.addCharacteristic(seizureAlertCharacteristicUuid);
 
   // Advertise our private service only
-  advData.appendServiceUUID(serviceUuid);
+  // advData.appendServiceUUID(serviceUuid);
+  newAdvData.appendServiceUUID(newServiceUuid);
   seizureAdvData.appendServiceUUID(seizureUuid);
 }
 
@@ -174,7 +183,7 @@ void setup()
   display.setTextColor(SSD1306_WHITE);
   display.clearDisplay();
   display.setCursor(0, 0);
-  display.println("ePad Sim v1.3");
+  display.println("ePad Sim v1.4");
   display.println("<- A Join WiFi");
   display.println("<- B Adv Packet");
   display.display();
@@ -349,7 +358,7 @@ void loop()
     if (seizureDetectTrigger && seizureFastModeOn) {
       BLE.advertise(&seizureAdvData);
     } else {
-      BLE.advertise(&advData);
+      BLE.advertise(&newAdvData);
     }
     state = advertising;
     break;
@@ -424,12 +433,14 @@ void clearSeizure()
 
 void updateCharacteristicValues()
 {
-  insBatteryLevelCharacteristicUuid.setValue((int)insBattery);
-  insConnectionCharacteristicUuid.setValue(1);
-  ctmConnectionCharacteristicUuid.setValue(1);
-  tabletBatteryLevelCharacteristicUuid.setValue((int)tabletBattery);
-  tabletDiskSpaceCharacteristicUuid.setValue((int)tabletDiskSpace);
-  tabletConnectionCharacteristicUuid.setValue(1);
+  uint8_t txBuf[7] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+  fullStatusCharacteristicUuid.setValue(txBuf, 7);
+  // insBatteryLevelCharacteristicUuid.setValue((uint8_t)insBattery);
+  // insConnectionCharacteristicUuid.setValue(1);
+  // ctmConnectionCharacteristicUuid.setValue(1);
+  // tabletBatteryLevelCharacteristicUuid.setValue((int)tabletBattery);
+  // tabletDiskSpaceCharacteristicUuid.setValue((int)tabletDiskSpace);
+  // tabletConnectionCharacteristicUuid.setValue(1);
 
   insBattery = insBattery - 0.2;
   tabletBattery = tabletBattery - 0.1;
