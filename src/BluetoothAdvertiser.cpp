@@ -176,11 +176,12 @@ void configureBLE()
 // setup() runs once, when the device is first turned on.
 void setup()
 {
-  WiFi.setCredentials("CZGuest","Hoste46783");
-  WiFi.setCredentials("Silicon Washa,","Rodinka19");
+  WiFi.setCredentials("CZGuest", "Hoste46783");
+  WiFi.setCredentials("Silicon Washa,", "Rodinka19");
   Serial.begin(9600);
   packetNumber = EEPROM.read(0x00);
-  if (packetNumber == 0xFF) {
+  if (packetNumber == 0xFF)
+  {
     packetNumber = 0;
     EEPROM.put(0x00, packetNumber);
   }
@@ -262,7 +263,8 @@ void loop()
     }
     if (!digitalRead(BUTTON_C))
     {
-      if (packetNumber > 0) {
+      if (packetNumber > 0)
+      {
         packetNumber--;
         EEPROM.put(0x00, packetNumber);
       }
@@ -370,12 +372,15 @@ void loop()
     break;
   case startAdvertising:
     connectionTimer = 0;
-    advertisingTimer = millis() + 1000000; // advertise for a max of 10 seconds then give up
+    advertisingTimer = millis() + 10000; // advertise for a max of 10 seconds then give up
     waitingTimer = 0;
     updateCharacteristicValues();
-    if (seizureDetectTrigger && seizureFastModeOn) {
+    if (seizureDetectTrigger && seizureFastModeOn)
+    {
       BLE.advertise(&seizureAdvData);
-    } else {
+    }
+    else
+    {
       BLE.advertise(&newAdvData);
     }
     state = advertising;
@@ -385,9 +390,12 @@ void loop()
     display.clearDisplay();
     display.setCursor(0, 0);
     display.setTextSize(1);
-    if (seizureDetectTrigger && seizureFastModeOn) {
+    if (seizureDetectTrigger && seizureFastModeOn)
+    {
       display.print("   ...adv: seizure...");
-    } else {
+    }
+    else
+    {
       display.print("   ...adv: normal...");
     }
     display.setCursor(30, 18);
@@ -451,7 +459,17 @@ void clearSeizure()
 
 void updateCharacteristicValues()
 {
-  uint8_t txBuf[7] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+  // Order of statuses in transmit buffer.
+  //
+  // Ctm Connection
+  // INS connection
+  // tablet connection
+  // Ctm battery level
+  // Ins battery level
+  // tablet battery level
+  // tablet disk space
+
+  uint8_t txBuf[7] = {0x01, 0x01, 0x01, 0x00, (uint8_t)insBattery, (uint8_t)tabletBattery, (uint8_t)tabletDiskSpace};
   fullStatusCharacteristicUuid.setValue(txBuf, 7);
   // insBatteryLevelCharacteristicUuid.setValue((uint8_t)insBattery);
   // insConnectionCharacteristicUuid.setValue(1);
@@ -517,9 +535,11 @@ void handleTimedEvents()
     }
   }
 }
-uint8_t getPacketNumber() {
+uint8_t getPacketNumber()
+{
   uint8_t number = EEPROM.read(0x00);
-  if (number == 0xFF) {
+  if (number == 0xFF)
+  {
     number = 0;
     EEPROM.write(0x00, 0);
   }
